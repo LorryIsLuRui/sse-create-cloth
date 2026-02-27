@@ -1,0 +1,5 @@
+{
+  "name": "sse-create-cloth",
+  "private": true,
+  "packageManager": "pnpm@9.14.2"
+}
