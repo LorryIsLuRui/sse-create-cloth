@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outfit } from '../App'
+import type { Outfit } from '../types'
 
 export default function OutfitCard({
   outfit,

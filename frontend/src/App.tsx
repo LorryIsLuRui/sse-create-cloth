@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { mockParsed, mockOutfits } from './mockData' // mock data for UI development
 import { DEFAULT_INPUT, USE_MOCK, ASSISTANT_BUBBLE_WIDTH, ASSISTANT_BUBBLE_HEIGHT } from './config'
+import { useRecommendSSE } from './useRecommendSSE'
 import OutfitCard from './components/OutfitCard'  
 
 import { Parsed, Outfit, UserMessage, AssistantMessage } from './types'
@@ -12,14 +13,23 @@ import { Parsed, Outfit, UserMessage, AssistantMessage } from './types'
 export default function App() {
   const [input, setInput] = useState(DEFAULT_INPUT)
   const [chatHistory, setChatHistory] = useState<(UserMessage | AssistantMessage)[]>([])
-  const [loading, setLoading] = useState(false)
-  const [currentParsed, setCurrentParsed] = useState<Parsed | null>(null)
-  const [currentOutfits, setCurrentOutfits] = useState<Outfit[]>([])
-  const [currentError, setCurrentError] = useState<string | null>(null)
+  const [mockLoading, setMockLoading] = useState(false)
+  const [mockCurrentParsed, setMockCurrentParsed] = useState<Parsed | null>(null)
+  const [mockCurrentOutfits, setMockCurrentOutfits] = useState<Outfit[]>([])
   const [sessionId] = useState(() => `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const parsedRef = useRef<Parsed | null>(null)
-  const outfitsRef = useRef<Outfit[]>([])
+
+  const onDone = useCallback((parsed: Parsed | null, outfits: Outfit[]) => {
+    setChatHistory((prev) => [...prev, { role: 'assistant', parsed, outfits, error: undefined }])
+  }, [])
+  const onError = useCallback((message: string) => {
+    setChatHistory((prev) => [...prev, { role: 'assistant', parsed: null, outfits: [], error: message }])
+  }, [])
+  const { startRecommend: startSSE, loading: sseLoading, currentParsed: sseParsed, currentOutfits: sseOutfits, currentError: sseError } = useRecommendSSE({ onDone, onError })
+  const loading = USE_MOCK ? mockLoading : sseLoading
+  const currentParsed = USE_MOCK ? mockCurrentParsed : sseParsed
+  const currentOutfits = USE_MOCK ? mockCurrentOutfits : sseOutfits
+  const currentError = USE_MOCK ? null : sseError
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -29,95 +39,28 @@ export default function App() {
     const text = input.trim()
     if (!text) return
 
-    setLoading(true)
-    parsedRef.current = null
-    outfitsRef.current = []
-    setCurrentParsed(null)
-    setCurrentOutfits([])
-    setCurrentError(null)
     setChatHistory((prev) => [...prev, { role: 'user', text }])
     setInput(DEFAULT_INPUT)
 
     if (USE_MOCK) {
-      // simulate streaming with setTimeouts
-      setTimeout(() => {
-        setCurrentParsed(mockParsed)
-      }, 200)
+      setMockLoading(true)
+      setMockCurrentParsed(null)
+      setMockCurrentOutfits([])
+      setTimeout(() => setMockCurrentParsed(mockParsed), 200)
       mockOutfits.forEach((o, idx) => {
-        setTimeout(() => {
-          outfitsRef.current = [...outfitsRef.current, o]
-          setCurrentOutfits((prev) => [...prev, o])
-        }, 400 + idx * 200)
+        setTimeout(() => setMockCurrentOutfits((prev) => [...prev, o]), 400 + idx * 200)
       })
       setTimeout(() => {
-        setChatHistory((prev) => [
-          ...prev,
-          { role: 'assistant', parsed: mockParsed, outfits: mockOutfits },
-        ])
-        setLoading(false)
+        setChatHistory((prev) => [...prev, { role: 'assistant', parsed: mockParsed, outfits: mockOutfits }])
+        setMockLoading(false)
+        setMockCurrentParsed(null)
+        setMockCurrentOutfits([])
       }, 1200)
       return
     }
 
-    const q = encodeURIComponent(text)
-    const eventSource = new EventSource(`/sse/recommend?q=${q}`)
-
-    eventSource.addEventListener('parsed', (e) => {
-      try {
-        const data = JSON.parse((e as MessageEvent).data)
-        parsedRef.current = data
-        setCurrentParsed(data)
-      } catch (_) {}
-    })
-    eventSource.addEventListener('outfit', (e) => {
-      try {
-        const data = JSON.parse((e as MessageEvent).data)
-        const item = { index: data.index, ...data }
-        outfitsRef.current = [...outfitsRef.current, item]
-        setCurrentOutfits((prev) => [...prev, item])
-      } catch (_) {}
-    })
-    eventSource.addEventListener('done', () => {
-      const parsed = parsedRef.current
-      const outfits = [...outfitsRef.current]
-      setChatHistory((prev) => [
-        ...prev,
-        { role: 'assistant', parsed, outfits, error: undefined },
-      ])
-      parsedRef.current = null
-      outfitsRef.current = []
-      setCurrentParsed(null)
-      setCurrentOutfits([])
-      setLoading(false)
-      eventSource.close()
-    })
-    eventSource.addEventListener('error', (e) => {
-      let errMsg = '请求失败'
-      try {
-        const data = JSON.parse((e as MessageEvent).data)
-        errMsg = data.message || errMsg
-      } catch (_) {}
-      setCurrentError(errMsg)
-      setChatHistory((prev) => [...prev, { role: 'assistant', parsed: null, outfits: [], error: errMsg }])
-      parsedRef.current = null
-      outfitsRef.current = []
-      setCurrentParsed(null)
-      setCurrentOutfits([])
-      setLoading(false)
-      eventSource.close()
-    })
-    eventSource.onerror = () => {
-      const err = 'SSE 连接失败，请检查 Ollama 是否已启动'
-      setCurrentError(err)
-      setChatHistory((prev) => [...prev, { role: 'assistant', parsed: null, outfits: [], error: err }])
-      parsedRef.current = null
-      outfitsRef.current = []
-      setCurrentParsed(null)
-      setCurrentOutfits([])
-      setLoading(false)
-      eventSource.close()
-    }
-  }, [input])
+    startSSE(text)
+  }, [input, startSSE])
 
   const sendFeedback = useCallback(async (outfitIndex: number, action: 'adopt' | 'abandon') => {
     try {
@@ -312,5 +255,3 @@ export default function App() {
     </div>
   )
 }
-
-// OutfitCard component has been moved to src/components/OutfitCard.tsx

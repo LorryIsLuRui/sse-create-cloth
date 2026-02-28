@@ -1,4 +1,4 @@
-const OLLAMA_URL = 'http://localhost:11434/v1/chat/completions';
+const OLLAMA_URL = 'http://127.0.0.1:11434/v1/chat/completions';
 // 可根据本地实际情况调整模型名称，例如：'llama3.2:3b'、'llama3.1:8b'
 const OLLAMA_MODEL = 'llama3.2:3b';
 
