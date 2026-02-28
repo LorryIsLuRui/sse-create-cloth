@@ -79,5 +79,5 @@ app.post('/api/feedback', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server http://localhost:${PORT}`);
+  console.log(`Server http://127.0.0.1:${PORT}`);
 });

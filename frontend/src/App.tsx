@@ -1,28 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { mockParsed, mockOutfits } from './mockData' // mock data for UI development
+import { DEFAULT_INPUT, USE_MOCK, ASSISTANT_BUBBLE_WIDTH, ASSISTANT_BUBBLE_HEIGHT } from './config'
+import OutfitCard from './components/OutfitCard'  
 
-export type Parsed = {
-  date: string
-  weather: string
-  occasion: string
-  colorPreference: string
-  comfortPreference: string
-  thicknessPreference: string
-}
+import { Parsed, Outfit, UserMessage, AssistantMessage } from './types'
 
-export type Outfit = {
-  index: number
-  title: string
-  description: string
-  imageUrl: string
-}
+// configuration values are now moved to config.ts
 
-type UserMessage = { role: 'user'; text: string }
-type AssistantMessage = { role: 'assistant'; parsed: Parsed | null; outfits: Outfit[]; error?: string }
-
-const DEFAULT_INPUT = '明天阴天 15 度，去面试，希望正式一点、偏深色、不要太厚'
-
-const ASSISTANT_BUBBLE_WIDTH = 520
-const ASSISTANT_BUBBLE_HEIGHT = 380
+// bubble sizing moved to config.ts
 
 export default function App() {
   const [input, setInput] = useState(DEFAULT_INPUT)
@@ -52,6 +37,27 @@ export default function App() {
     setCurrentError(null)
     setChatHistory((prev) => [...prev, { role: 'user', text }])
     setInput(DEFAULT_INPUT)
+
+    if (USE_MOCK) {
+      // simulate streaming with setTimeouts
+      setTimeout(() => {
+        setCurrentParsed(mockParsed)
+      }, 200)
+      mockOutfits.forEach((o, idx) => {
+        setTimeout(() => {
+          outfitsRef.current = [...outfitsRef.current, o]
+          setCurrentOutfits((prev) => [...prev, o])
+        }, 400 + idx * 200)
+      })
+      setTimeout(() => {
+        setChatHistory((prev) => [
+          ...prev,
+          { role: 'assistant', parsed: mockParsed, outfits: mockOutfits },
+        ])
+        setLoading(false)
+      }, 1200)
+      return
+    }
 
     const q = encodeURIComponent(text)
     const eventSource = new EventSource(`/sse/recommend?q=${q}`)
@@ -130,7 +136,7 @@ export default function App() {
       )
     }
     return (
-      <div style={{ padding: 12, overflow: 'auto', height: '100%', boxSizing: 'border-box' }}>
+      <div style={{ padding: 12, overflow: 'hidden', height: '100%', boxSizing: 'border-box' }}>
         {parsed && (
           <div style={{ marginBottom: 12, flexShrink: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>解析结果</div>
@@ -148,18 +154,24 @@ export default function App() {
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>推荐穿搭</div>
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${outfits.length}, minmax(0, 1fr))`,
-                gap: 12,
+                display: 'flex',
+                gap: 16,
+                overflowX: outfits.length > 3 ? 'auto' : 'visible',
+                overflowY: 'hidden',
+                // container width shows up to three items, extra scroll
+                maxWidth: 3 * 180 + 2 * 16,
+                height: 260, // increased height to give more breathing room
+                paddingBottom: 4,
               }}
             >
               {outfits.map((o) => (
-                <OutfitCard
-                  key={o.index}
-                  outfit={o}
-                  onAdopt={showFeedback ? () => sendFeedback(o.index, 'adopt') : () => {}}
-                  onAbandon={showFeedback ? () => sendFeedback(o.index, 'abandon') : () => {}}
-                />
+                <div style={{ width: 180, height: 240, flex: '0 0 180px' }} key={o.index}>
+                  <OutfitCard
+                    outfit={o}
+                    onAdopt={showFeedback ? () => sendFeedback(o.index, 'adopt') : () => {}}
+                    onAbandon={showFeedback ? () => sendFeedback(o.index, 'abandon') : () => {}}
+                  />
+                </div>
               ))}
             </div>
           </div>
@@ -301,81 +313,4 @@ export default function App() {
   )
 }
 
-function OutfitCard({
-  outfit,
-  onAdopt,
-  onAbandon,
-}: {
-  outfit: Outfit
-  onAdopt: () => void
-  onAbandon: () => void
-}) {
-  const [feedback, setFeedback] = useState<'adopt' | 'abandon' | null>(null)
-
-  const handleAdopt = () => {
-    if (feedback !== null) return
-    setFeedback('adopt')
-    onAdopt()
-  }
-  const handleAbandon = () => {
-    if (feedback !== null) return
-    setFeedback('abandon')
-    onAbandon()
-  }
-
-  return (
-    <div
-      style={{
-        minWidth: 0,
-        background: '#f9f9f9',
-        borderRadius: 8,
-        overflow: 'hidden',
-        border: '1px solid #eee',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      <img
-        src={outfit.imageUrl}
-        alt={outfit.title}
-        style={{ width: '100%', height: 100, objectFit: 'cover', flexShrink: 0 }}
-      />
-      <div style={{ padding: 8, flex: 1, minWidth: 0 }}>
-        <h3 style={{ margin: '0 0 4px', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{outfit.title}</h3>
-        <p style={{ margin: '0 0 8px', color: '#555', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{outfit.description}</p>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button
-            onClick={handleAdopt}
-            disabled={feedback !== null}
-            style={{
-              padding: '4px 10px',
-              borderRadius: 6,
-              border: 'none',
-              background: feedback === 'adopt' ? '#0a0' : '#1a73e8',
-              color: '#fff',
-              fontSize: 11,
-              cursor: feedback === null ? 'pointer' : 'default',
-            }}
-          >
-            {feedback === 'adopt' ? '已采纳' : '采纳'}
-          </button>
-          <button
-            onClick={handleAbandon}
-            disabled={feedback !== null}
-            style={{
-              padding: '4px 10px',
-              borderRadius: 6,
-              border: '1px solid #999',
-              background: feedback === 'abandon' ? '#999' : 'transparent',
-              color: feedback === 'abandon' ? '#fff' : '#333',
-              fontSize: 11,
-              cursor: feedback === null ? 'pointer' : 'default',
-            }}
-          >
-            {feedback === 'abandon' ? '已放弃' : '放弃'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
+// OutfitCard component has been moved to src/components/OutfitCard.tsx

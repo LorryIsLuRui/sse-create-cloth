@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "sessionId": "s-1772165330615-v1dxmq",
+    "outfitIndex": 1,
+    "action": "abandon",
+    "at": "2026-02-27T04:11:27.181Z"
+  },
+  {
+    "sessionId": "s-1772165330615-v1dxmq",
+    "outfitIndex": 1,
+    "action": "adopt",
+    "at": "2026-02-27T04:11:39.091Z"
+  },
+  {
+    "sessionId": "s-1772165330615-v1dxmq",
+    "outfitIndex": 1,
+    "action": "adopt",
+    "at": "2026-02-27T04:11:44.388Z"
+  }
+]
